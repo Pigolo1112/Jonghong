@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ระบบจองห้องประชุม คณะวิทยาศาสตร์และนวัตกรรมดิจิทัล">
+    <title>ระบบจองห้องประชุม | คณะวิทยาศาสตร์และนวัตกรรมดิจิทัล</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-layout" id="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-sm">🏛️</div>
+                <div>
+                    <h2>จองห้องประชุม</h2>
+                    <span>คณะวิทย์ฯ & นวัตกรรม</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <!-- Main Menu -->
+                <div class="nav-section">
+                    <div class="nav-section-title">เมนูหลัก</div>
+                    <button class="nav-item active" data-route="dashboard" onclick="navigateTo('dashboard')">
+                        <span class="nav-icon">📊</span>
+                        แดชบอร์ด
+                    </button>
+                    <button class="nav-item" data-route="rooms" onclick="navigateTo('rooms')">
+                        <span class="nav-icon">🏢</span>
+                        ห้องประชุม
+                    </button>
+                    <button class="nav-item" data-route="booking" onclick="navigateTo('booking')">
+                        <span class="nav-icon">📅</span>
+                        จองห้องประชุม
+                    </button>
+                    <button class="nav-item" data-route="my-bookings" onclick="navigateTo('my-bookings')">
+                        <span class="nav-icon">📋</span>
+                        การจองของฉัน
+                    </button>
+                </div>
+
+                <!-- Admin Menu -->
+                <div class="nav-section" id="admin-menu" style="display:none">
+                    <div class="nav-section-title">ผู้ดูแลระบบ</div>
+                    <button class="nav-item" data-route="approval" onclick="navigateTo('approval')">
+                        <span class="nav-icon">✅</span>
+                        อนุมัติการจอง
+                        <span class="badge" id="pending-count" style="display:none">0</span>
+                    </button>
+                    <button class="nav-item" data-route="reports" onclick="navigateTo('reports')">
+                        <span class="nav-icon">📈</span>
+                        รายงาน
+                    </button>
+                    <button class="nav-item" data-route="users" onclick="navigateTo('users')">
+                        <span class="nav-icon">👥</span>
+                        จัดการผู้ใช้
+                    </button>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="user-avatar" id="sidebar-avatar">?</div>
+                    <div class="user-info">
+                        <div class="user-name" id="sidebar-name">Loading...</div>
+                        <div class="user-role" id="sidebar-role">-</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Sidebar Overlay (mobile) -->
+        <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+                    <h1 class="topbar-title" id="topbar-title">📊 แดชบอร์ด</h1>
+                </div>
+                <div class="topbar-right">
+                    <button class="topbar-btn" onclick="ThemeManager.toggle()" title="สลับธีม" id="theme-toggle">
+                        🌙
+                    </button>
+                    <button class="topbar-btn" onclick="handleSignOut()" title="ออกจากระบบ" id="logout-btn">
+                        🚪
+                    </button>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <div class="page-content fade-in" id="page-content">
+                <!-- Dynamic content loaded here -->
+                <div class="page-loader">
+                    <div class="spinner lg"></div>
+                    <p>กำลังโหลด...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Modal containers -->
+    <div class="modal-backdrop" id="room-modal-backdrop" onclick="ModalManager.close('room-modal')"></div>
+    <div class="modal modal-lg" id="room-modal"></div>
+
+    <div class="modal-backdrop" id="booking-modal-backdrop" onclick="ModalManager.close('booking-modal')"></div>
+    <div class="modal modal-lg" id="booking-modal"></div>
+
+    <div class="modal-backdrop" id="detail-modal-backdrop" onclick="ModalManager.close('detail-modal')"></div>
+    <div class="modal modal-lg" id="detail-modal"></div>
+
+    <script type="module">
+        import { initAuth, getProfile, isAdmin, signOut } from './auth.js';
+        import { Router } from './router.js';
+        import { ThemeManager, ToastManager, ModalManager, getInitials } from './utils.js';
+        import { renderDashboard } from './dashboard.js';
+        import { renderRooms } from './rooms.js';
+        import { renderBooking } from './booking.js';
+        import { renderMyBookings } from './my-bookings.js';
+        import { renderApproval } from './approval.js';
+        import { renderReports } from './reports.js';
+        import { renderUsers } from './users.js';
+        import { supabase } from './supabase-config.js';
+
+        // Make utils globally available
+        window.ThemeManager = ThemeManager;
+        window.ToastManager = ToastManager;
+        window.ModalManager = ModalManager;
+        window.supabase = supabase;
+
+        // Initialize
+        async function init() {
+            ThemeManager.init();
+
+            // Auth check
+            const auth = await initAuth();
+            if (!auth) return;
+
+            const { profile } = auth;
+
+            // Update sidebar user info
+            document.getElementById('sidebar-avatar').textContent = getInitials(profile.name);
+            document.getElementById('sidebar-name').textContent = profile.name || 'ผู้ใช้';
+            const roleNames = { admin: 'ผู้ดูแลระบบ', staff: 'อาจารย์/บุคลากร', student: 'นิสิต' };
+            document.getElementById('sidebar-role').textContent = roleNames[profile.role] || profile.role;
+
+            // Show admin menu
+            if (isAdmin()) {
+                document.getElementById('admin-menu').style.display = 'block';
+                loadPendingCount();
+            }
+
+            // Register routes
+            Router.register('dashboard', () => renderDashboard());
+            Router.register('rooms', () => renderRooms());
+            Router.register('booking', (params) => renderBooking(params));
+            Router.register('my-bookings', () => renderMyBookings());
+            Router.register('approval', () => renderApproval());
+            Router.register('reports', () => renderReports());
+            Router.register('users', () => renderUsers());
+
+            // Start router
+            Router.init();
+        }
+
+        // Load pending bookings count for admin badge
+        async function loadPendingCount() {
+            const { count } = await supabase
+                .from('bookings')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'pending');
+
+            const badge = document.getElementById('pending-count');
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = 'inline';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        // Navigation
+        window.navigateTo = function(route) {
+            Router.navigate(route);
+            closeSidebar();
+        };
+
+        // Sidebar toggle (mobile)
+        window.toggleSidebar = function() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebar-overlay').classList.toggle('active');
+        };
+
+        window.closeSidebar = function() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebar-overlay').classList.remove('active');
+        };
+
+        // Sign out
+        window.handleSignOut = async function() {
+            await signOut();
+        };
+
+        // Start app
+        init();
+    </script>
+</body>
+</html>
